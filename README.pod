@@ -9,7 +9,7 @@ I<squashfu> <action> [options]
 =head1 DESCRIPTION
 
 I<squashfu> is a Bash based backup utility that uses the flexibility of rsync, squashfs, 
-and aufs to create incremental backups and offer limited compression.
+and overlayfs to create incremental backups and offer limited compression.
 
 =head1 ACTIONS
 
@@ -143,7 +143,7 @@ L<http://en.wikipedia.org/wiki/Aufs>
 
 L<http://en.wikipedia.org/wiki/UnionFS>
 
-L<http://aufs.sourceforge.net/>
+L<http://en.wikipedia.com/wiki/OverlayFS/>
 
 L<http://en.wikipedia.org/wiki/SquashFS>
 
@@ -152,7 +152,7 @@ L<http://en.wikipedia.org/wiki/Rsync>
 
 =head1 SEE ALSO
 
-B<aufs>(5), B<rsync>(1)
+B<overlayfs>(5), B<rsync>(1)
 
 =head1 AUTHOR
 

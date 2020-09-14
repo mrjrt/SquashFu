@@ -101,15 +101,15 @@ mount_union_with_bins () {
   debug "Requested to mount bins: $*"
 
   # Mount first as rw, shift, and mount the rest ro
-  local branches="br=${BINS_DIR}/$1=rw:"; shift
+  local branches="upperdir=${BINS_DIR}/$1,lowerdir="; shift
   if [[ -n $1 ]]; then
     for bin in $*; do
-      branches="$branches$BINS_DIR/$bin=ro:"
+      branches="$branches$BINS_DIR/$bin:"
     done
   fi
-  branches="${branches}${SQUASH_MOUNT}=ro"
+  branches="${branches}${SQUASH_MOUNT}"
 
-  mount -t aufs none "$UNION_MOUNT" -o udba=reval,$branches
+  mount -t overlay overlay -oworkdir=$WORK_DIR,$branches "$UNION_MOUNT"
 
   return $?
 }
@@ -181,7 +181,7 @@ action_backup () {
     [[ ! "$reply" =~ [Yy] ]] && die "Your bin inventory and/or seed seem to be missing. Please fix this before continuing."
 
     # If we got here, the user answered yes, so initialize a new structure
-    mkdir -p "$UNION_MOUNT" "$SQUASH_MOUNT" "$BINS_DIR"
+    mkdir -p "$UNION_MOUNT" "$SQUASH_MOUNT" "$BINS_DIR" "$WORK_DIR"
     touch "$BINVENTORY"
     create_new_squash -1
     exit 0
