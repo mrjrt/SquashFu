@@ -29,7 +29,7 @@ create_new_squash () {
   # If making first seed, create it directly from source
   if [[ $1 -eq -1 ]]; then
     info "Creating seed from sources (this may take a while)"
-    mksquashfs "${INCLUDES[@]}" "$SEED" -b 65536 -e "${EXCLUDES[@]}" >/dev/null
+    mksquashfs "${INCLUDES[@]}" "$SEED" -b 65536 -e "${EXCLUDES[@]}" 
     if [[ $? -eq 0 ]]; then
       mount_squash
       info "Seed creation finished. It has been mounted at "$SQUASH_MOUNT" if you would like to make sure the proper files are included"
@@ -47,7 +47,7 @@ create_new_squash () {
 
   info "Merging old incrementals"
   # Create new squash with temp name, exiting on failure
-  mksquashfs "$UNION_MOUNT" "$SEED.replace" -b 65536 >/dev/null || return 1
+  mksquashfs "$UNION_MOUNT" "$SEED.replace" -b 65536  || return 1
 
   unmount_all
 
@@ -97,8 +97,7 @@ mount_squash () {
 mount_union_with_bins () {
 # Arguments: numbers of bins to be mounted (variable number)
 # Returns: 0 on successful mount, non-zero on failure
-  info "Mounting union"
-  debug "Requested to mount bins: $*"
+  info  "Mounting union and BINs: $*"
 
   # Mount first as rw, shift, and mount the rest ro
   local branches="upperdir=${BINS_DIR}/$1,lowerdir="; shift
@@ -109,6 +108,7 @@ mount_union_with_bins () {
   fi
   branches="${branches}${SQUASH_MOUNT}"
 
+  info "Using command: mount -t overlay overlay -oworkdir=${WORK_DIR},$branches ${UNION_MOUNT}"
   mount -t overlay overlay -oworkdir=$WORK_DIR,$branches "$UNION_MOUNT"
 
   return $?
@@ -257,6 +257,50 @@ action_remove_bin () {
   fi
 }
 
+#action_rollback () {
+## Args: BIN to rollback to
+## Returns: none
+#
+#  [[ $UID -ne 0 ]] && die "Must be root to perform a rollback"
+#  [[ ! $1 =~ ^[0-9]*$ ]] && die "Invalid argument. Parameter must be a number."
+#
+#  target_bin=$1
+#  info "Rolling back to BIN $target_bin" 
+#
+#  # Form a chronologically ordered list of bins, assuming the user didn't give bogus input
+#  local bin_list=($(sed -n 's/[\t\ ]*\([0-9]*\):.*/\1/p' "$BINVENTORY"))
+#  debug "bin_list = ${bin_list[@]}"
+#  local bin_count=${#bin_list[@]}
+#  debug "bin count = ${bin_count}"          
+#
+#  [[ $1 -gt ${#bin_list[@]} ]] && die "Cannot rollback more than ${#bin_list[@]} backups"
+#
+#  #local num_to_mount=$(( ${#bin_list[@]} - $target_bin ))
+#  local num_to_mount=$target_bin
+#  debug "target_bin = ${num_to_mount}"
+#  debug "UNION_MOUNT = $UNION_MOUNT"
+#  debug "SQUASH_MOUNT = $SQUASH_MOUNT"
+#
+#  mountpoint -q "$UNION_MOUNT" && unmount_union
+#  mountpoint -q "$SQUASH_MOUNT" || mount_squash
+#  info "Mount test OK"
+#
+#  if [[ $bin_count -eq 0 ]]; then
+#    local rb_timestamp=0 # XXX: What the hell is the timestamp of the seed... ?
+#  else
+#    # voodoo magic: reverse bin_list and print off the top (#bin_list - $1) bins
+#    #info "BINS to include = " $(for (( i = ${#bin_list[@]} - $1 - 1; i >= 0; i-- )); do echo ${bin_list[i]}; done)
+#    debug "BINS to include = "$(for (( i = $target_bin -1 ; i >= 0; i-- )); do echo ${bin_list[i]}; done)
+#    mount_union_with_bins $(for (( i = $target_bin -1 ; i >= 0; i-- )); do echo ${bin_list[i]}; done)
+#    rb_timestamp=$(grep "^${target_bin}:" "$BINVENTORY" | cut -d: -f2)
+#    debug "rb_timestamp=$rb_timestamp"
+#  fi
+#
+#  info "You have rolled back to bin $target_bin $(date --rfc-3339=seconds --date="@$rb_timestamp")"
+#  info "Your files can be found at '$UNION_MOUNT'"
+#}
+
+
 action_rollback () {
 # Args: number of backups to roll back
 # Returns: none
@@ -264,27 +308,40 @@ action_rollback () {
   [[ $UID -ne 0 ]] && die "Must be root to perform a rollback"
   [[ ! $1 =~ ^[0-9]*$ ]] && die "Invalid argument. Parameter must be a number."
 
+  target_bin=$1
+  info "Rolling back to bin $target_bin"
+
   # Form a chronologically ordered list of bins, assuming the user didn't give bogus input
   local bin_list=($(sed -n 's/[\t\ ]*\([0-9]*\):.*/\1/p' "$BINVENTORY"))
+  info "List of bins = ${bin_list[@]}"
+  local bin_count=${#bin_list[@]}
+  info "Bin count = ${bin_count}"
 
   [[ $1 -gt ${#bin_list[@]} ]] && die "Cannot rollback more than ${#bin_list[@]} backups"
 
-  local num_to_mount=$(( ${#bin_list[@]} - $1 ))
+  #local num_to_mount=$(( ${#bin_list[@]} - $target_bin ))
+  local num_to_mount=$target_bin
+  info "Number of bins to mount = ${num_to_mount}"
 
   mountpoint -q "$UNION_MOUNT" && unmount_union
   mountpoint -q "$SQUASH_MOUNT" || mount_squash
+  info "Squash unmount/remount test OK"
 
-  if [[ ${#bin_list[@]} -eq $1 ]]; then
+  if [[ $bin_count -eq 0 ]]; then
     local rb_timestamp=0 # XXX: What the hell is the timestamp of the seed... ?
   else
     # voodoo magic: reverse bin_list and print off the top (#bin_list - $1) bins
-    mount_union_with_bins $(for (( i = ${#bin_list[@]} - $1 - 1; i >= 0; i-- )); do echo ${bin_list[i]}; done)
-    local rb_timestamp=$(grep "^${bin_list[@]:(-$num_to_mount):1}:" "$BINVENTORY" | cut -d: -f2)
+    #info "Bins to include = " $(for (( i = ${#bin_list[@]} - $1 - 1; i >= 0; i-- )); do echo ${bin_list[i]}; done)
+    info "Bins to include = "$(for (( i = $target_bin -1 ; i >= 0; i-- )); do echo ${bin_list[i]}; done)
+    mount_union_with_bins $(for (( i = $target_bin -1 ; i >= 0; i-- )); do echo ${bin_list[i]}; done)
+    rb_timestamp=$(grep "^${target_bin}:" "$BINVENTORY" | cut -d: -f2)
+    info "Using rb_timestamp=$rb_timestamp"
   fi
 
   info "You have rolled back to $(date --rfc-3339=seconds --date="@$rb_timestamp")"
   info "Your files can be found at '$UNION_MOUNT'"
 }
+
 
 action_report () {
   info "SquashFu Usage Report"
@@ -299,10 +356,10 @@ action_report () {
   printf "\n%30s\r" ".: Loading :." >&2
   while read size bin; do
     case $bin in
-      '.') DATA[0]=$size ;;
-      *) DATA[bin]=$size ;;
+      'total') DATA[0]=$size ;;
+      *) DATA[$bin]=$size ;;
     esac
-  done < <(du -sh . * 2>/dev/null)
+  done < <(du -shc * 2>/dev/null)
   printf "%30s\r" "" >&2
 
   printf "%10s\t%25s\t%7s\n" "Bin ID" "Date Created" "Size"
@@ -446,6 +503,16 @@ HELP
   exit 1
 }
 
+print_config() {
+  info "WORKDIR = $WORK_DIR"
+  info "BKUP_ROOT = $BKUP_ROOT"
+  info "SEED(ro) = $SEED"
+  info "SQUASH_MOUNT = $SQUASH_MOUNT"
+  info "UNION_MOUNT(rw) = $UNION_MOUNT"
+  info "BINS_DIR = $BINS_DIR"
+  info "BINVENTORY = $BINVENTORY"
+}
+
 while getopts :BG:CD:QR:Uc:v opt; do
   case $opt in
     B)
@@ -484,4 +551,7 @@ done
 
 [[ -z $action ]] && usage
 
-action_$action
+LOGNAME=${LOG_DIR}/backup-$(date +%Y%m%d-%H%M).log
+
+print_config 
+action_$action 
